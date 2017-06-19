@@ -10,5 +10,4 @@ Nginx: For serving static pages and static files and also acting as a reverse pr
 Process Manager(PM2): For restarting nodejs apps if down and also facilities for load balancing, monitoring and logging
 
 to run
-fetch role with==> ansible-galaxy install -r Requirements.yml
 vagrant up
