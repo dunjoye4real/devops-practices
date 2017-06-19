@@ -1,0 +1,76 @@
+---
+  - hosts : all
+    sudo: yes
+    vars:
+      #list of apps that pm2 manages
+      pm2_apps:
+        - /var/apps/services/app.js
+        - /var/apps/services/app2.js
+
+      #franklinkim.nodejs
+      nodejs_version: 0.10
+      nodejs_package:
+        - pm2  #installs pm2 globally
+
+    #roles:
+    #  - franklinkim.nodejs
+
+
+    pre_tasks:
+      - name: create apps group #creates a group called apps
+        group: name=apps state=present
+      - name: create apps user #creates a user in the groups and user is called apps
+        user: name=apps comment="Apps User" group=apps home=/var/apps #creates directory named /var/apps
+      - name: create node apps directory
+        file: path=/var/apps state=directory owner=apps group=apps mode=0775
+      - name: copy node app to app directory
+        copy: src=./services dest=/var/apps owner=apps group=apps mode=0644 #copies service dir on local machine, dir contain nodejs apps running on vagrant box
+
+
+    tasks:
+
+      - name: add apt key for nodesource
+        apt_key: url=https://deb.nodesource.com/gpgkey/nodesource.gpg.key
+      - name: add repo for nodesource
+        apt_repository:
+            repo: 'deb https://deb.nodesource.com/node_0.10 {{ ansible_distribution_release }} main'
+            update_cache: yes
+      - name: install nodejs
+        apt: name=nodejs
+      - name: install nginx #nginx installation
+        apt: name=nginx state=present update_cache=yes
+        notify:
+          - start nginx
+      - name: configure nginx
+        copy: src={{ item }} dest=/etc/nginx/sites-available/
+        with_fileglob:
+          - ./nginx/*
+        notify:
+          - restart nginx
+
+      - name: stop node apps # task stops node, and kills any application that is already running
+        command: pm2 deletes all
+        become: yes
+        become_user: apps
+        ignore_errors: yes
+      - name: start node apps #starts node and iterates through list of existing apps in pm2_apps
+        command: pm2 starts {{ item }}
+        become: yes
+        become_user: apps
+        with_items: pm2_apps
+      - name: installing startup scripts #pm2 creates startup scripts and install it as a service
+        command: pm2 startup ubuntu -u apps
+        environment:
+          HOME: /var/apps
+        notify:
+          - start pm2
+
+
+
+    handlers:
+      - name: start nginx
+        service: name=nginx start=started
+      - name: restart nginx
+        service: name=nginx start=restarted
+      - name: start pm2
+        service: name=pm2-init.sh state=started
